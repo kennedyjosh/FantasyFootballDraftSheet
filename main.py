@@ -200,7 +200,8 @@ if __name__ == '__main__':
             # Apply the undrafted format to each row initially
             undrafted_format = workbook.add_format({
                 'bold': True,
-                'font_color': 'black'
+                'font_color': 'black',
+                'font_size': 14
             })
             worksheet.set_row(row_num, None, undrafted_format)
 
