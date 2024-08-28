@@ -166,7 +166,7 @@ if __name__ == '__main__':
                     f.write(','.join(row) + '\n')
 
     # Create a new Excel workbook
-    workbook = xlsxwriter.Workbook("DraftSheet.xlsx")
+    workbook = xlsxwriter.Workbook("DraftSheet.xlsm")
 
     for file_name in sorted(os.listdir("output")):
         if not file_name.endswith(".csv"):
@@ -179,24 +179,41 @@ if __name__ == '__main__':
         worksheet_name = file_name.split(".")[0]
         worksheet = workbook.add_worksheet(worksheet_name)
 
-        # Write the DataFrame to the new worksheet
+        # Write headers and data to the worksheet
         for i, col_name in enumerate(df.columns):
-            worksheet.write(0, i, col_name)  # Write the header
+            worksheet.write(0, i + 1, col_name)  # Write the header in B, C, D, ...
             for j, value in enumerate(df[col_name]):
-                worksheet.write(j + 1, i, value)  # Write the data
+                worksheet.write(j + 1, i + 1, value)  # Write the data in rows starting from B2
+
+        # Add a button in column A for each player
+        for row_num in range(1, len(df) + 1):
+            button_name = f'Button_{worksheet_name}_{row_num}'
+            worksheet.insert_button(f'A{row_num + 1}', {
+                'macro': 'DraftPlayer',
+                'caption': 'Draft',
+                'width': 50,
+                'height': 20,
+                'x_offset': 2,
+                'y_offset': 2
+            })
+
+            # Apply the undrafted format to each row initially
+            undrafted_format = workbook.add_format({
+                'bold': True,
+                'font_color': 'black'
+            })
+            worksheet.set_row(row_num, None, undrafted_format)
 
         # Set the width of the "Name" column to fit the longest name
         if "Name" in df.columns:
             max_name_length = df["Name"].str.len().max()
-            worksheet.set_column(0, 0, max_name_length + 2)  # Column 'A' (index 0)
+            worksheet.set_column(1, 1, max_name_length + 2)  # Column 'B' (index 1)
 
-        # Apply a heatmap to all columns except "Name" and "Position"
+        # Apply heatmap to the columns except "Name" and "Position"
         for i, column_name in enumerate(df.columns):
             if column_name not in ["Name", "Position"]:
-                col_index = i
-
+                col_index = i + 1  # Adjusted index for xlsxwriter
                 if column_name == "Range":
-                    # Define the color scale for the "Range" column
                     worksheet.conditional_format(1, col_index, len(df), col_index, {
                         'type': '3_color_scale',
                         'min_type': 'percentile',
@@ -210,7 +227,6 @@ if __name__ == '__main__':
                         'max_color': '#FF6347'  # Darker red for high values
                     })
                 else:
-                    # Define the color scale for other columns
                     worksheet.conditional_format(1, col_index, len(df), col_index, {
                         'type': '3_color_scale',
                         'min_type': 'min',
@@ -221,6 +237,9 @@ if __name__ == '__main__':
                         'max_type': 'max',
                         'max_color': '#00FF00'  # Green for maximum values
                     })
+
+    # Include the VBA macro script in your workbook
+    workbook.add_vba_project('./vbaProject.bin')  # Assumes you have a vbaProject.bin file with the macro
 
     # Close the workbook (saves it)
     workbook.close()
