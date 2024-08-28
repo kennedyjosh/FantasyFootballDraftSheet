@@ -1,9 +1,7 @@
 import csv
 import os
 import pandas as pd
-from openpyxl import Workbook
-from openpyxl.utils.dataframe import dataframe_to_rows
-from openpyxl.formatting.rule import ColorScaleRule
+import xlsxwriter
 
 class PPR:
     weights = {
@@ -167,58 +165,65 @@ if __name__ == '__main__':
                            f"{high - baseline_avg:.1f}", f"{high - low:.1f}"] + data[player.name][1:]
                     f.write(','.join(row) + '\n')
 
-    # Convert CSV output into formatted Excel files
     # Create a new Excel workbook
-    wb = Workbook()
+    workbook = xlsxwriter.Workbook("DraftSheet.xlsx")
 
     for file_name in sorted(os.listdir("output")):
         if not file_name.endswith(".csv"):
             continue
+
         # Load each CSV into a pandas DataFrame
         df = pd.read_csv(os.path.join("output", file_name))
 
         # Add a new sheet to the workbook
-        ws = wb.create_sheet(title=file_name.split(".")[0])
+        worksheet_name = file_name.split(".")[0]
+        worksheet = workbook.add_worksheet(worksheet_name)
 
         # Write the DataFrame to the new worksheet
-        for r in dataframe_to_rows(df, index=False, header=True):
-            ws.append(r)
+        for i, col_name in enumerate(df.columns):
+            worksheet.write(0, i, col_name)  # Write the header
+            for j, value in enumerate(df[col_name]):
+                worksheet.write(j + 1, i, value)  # Write the data
 
         # Set the width of the "Name" column to fit the longest name
         if "Name" in df.columns:
             max_name_length = df["Name"].str.len().max()
-            ws.column_dimensions['A'].width = max_name_length + 2  # Adjust width with some padding
+            worksheet.set_column(0, 0, max_name_length + 2)  # Column 'A' (index 0)
 
-        # Apply a heatmap to the all columns except "Name" and "Position"
-        for column_name in [col for col in df.columns if col not in ["Name", "Position"]]:
-            if column_name in df.columns:
-                col_index = df.columns.get_loc(column_name) + 1  # +1 because openpyxl is 1-indexed
+        # Apply a heatmap to all columns except "Name" and "Position"
+        for i, column_name in enumerate(df.columns):
+            if column_name not in ["Name", "Position"]:
+                col_index = i
 
                 if column_name == "Range":
-                    # Define the color scale as a gradient over percentiles, lower range is better
-                    heatmap_rule = ColorScaleRule(
-                        start_type='percentile', start_value=0, start_color='00FF00',  # Green for low values
-                        mid_type='percentile', mid_value=50, mid_color='FFFFFF',  # White for middle values
-                        end_type='percentile', end_value=100, end_color='FF6347'  # Darker red for high values
-                    )
+                    # Define the color scale for the "Range" column
+                    worksheet.conditional_format(1, col_index, len(df), col_index, {
+                        'type': '3_color_scale',
+                        'min_type': 'percentile',
+                        'min_value': 0,
+                        'min_color': '#00FF00',  # Green for low values
+                        'mid_type': 'percentile',
+                        'mid_value': 50,
+                        'mid_color': '#FFFFFF',  # White for middle values
+                        'max_type': 'percentile',
+                        'max_value': 100,
+                        'max_color': '#FF6347'  # Darker red for high values
+                    })
                 else:
-                    # Define the color scale with 0 as the midpoint
-                    heatmap_rule = ColorScaleRule(
-                        start_type='min', start_value=None, start_color='FF6347',  # Darker red for minimum values
-                        mid_type='num', mid_value=0, mid_color='FFFFFF',  # White for 0
-                        end_type='max', end_value=None, end_color='00FF00'  # Green for maximum values
-                    )
+                    # Define the color scale for other columns
+                    worksheet.conditional_format(1, col_index, len(df), col_index, {
+                        'type': '3_color_scale',
+                        'min_type': 'min',
+                        'min_color': '#FF6347',  # Darker red for minimum values
+                        'mid_type': 'num',
+                        'mid_value': 0,
+                        'mid_color': '#FFFFFF',  # White for 0
+                        'max_type': 'max',
+                        'max_color': '#00FF00'  # Green for maximum values
+                    })
 
-                # Apply the rule to the appropriate column
-                col_letter = chr(64 + col_index)  # Convert column index to Excel column letter
-                ws.conditional_formatting.add(f'{col_letter}2:{col_letter}{ws.max_row}', heatmap_rule)
-
-    # Remove the default first sheet created with the workbook (if it hasn't been used)
-    if 'Sheet' in wb.sheetnames:
-        del wb['Sheet']
-
-    # Save the workbook
-    wb.save("DraftSheet.xlsx")
+    # Close the workbook (saves it)
+    workbook.close()
 
     print("Done")
 
