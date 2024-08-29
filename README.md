@@ -1,0 +1,66 @@
+# Fantasy Football Draft Sheet
+
+This script will take fantasy football projections and create
+a custom draft sheet based on those projections.
+
+Draft Sheet Features:
+* Interactive: mark players as drafted or undrafted
+* Informational: View low, average, and high projections for
+  player scoring, per week
+* Different views: View rankings by position (including flex)
+  or all players ranked
+
+## How to use
+
+1. Put CSV files with stat projections in the `fp_data` folder.
+   These CSV files should follow the naming convention of ending
+   with an underscore followed by the position, for example `Data_QB.csv`.
+   The data should be formatted similar to how FantasyPros data looks,
+   except with slightly different headers that can be seen at the top
+   of the code (`main.py`).
+2. Run `main.py`. Don't forget to install the requirements (`pip install -r requirements.txt`)
+3. Open `DraftSheet.xlsm` (enable macros) and you're ready to draft!
+   It's normal for the spreadsheet to take a long time to load when
+   first opening it, but once it's loaded it'll be quick. It shouldn't
+   take more than a minute to finish loading and then it will be ready to use.
+
+## Deciphering the information on the draft sheet
+
+Let's start with the positional ranking sheets (QB, TE, RB, WR).
+The `low`, `avg`, and `high` columns show low, average, and high projections
+for per-week scoring compared to the baseline player. The baseline player
+is the projected player who would be drafted after the 9th round. 
+
+For example, let's consider the case where Bijan Robinson has a 
+low, average, and high of 6.6, 9.8, and 13.2, respectively.
+This means he is projected to score at least 6.6 more points per week than
+the baseline player, at most 13.2 points per week more than the baseline
+player, and on average 9.8 points per week more than the baseline player.
+Remember, these are based on projections! If you want to know who the
+baseline player is, look for the player with an `avg` of `0`.
+
+The range for each player is there to help decipher the volatility of a player.
+It is calculated by subtracting the player's lowest projection from their highest
+projection of points scored per week. Players with a lower range have more
+consistent projections, while players with a higher range have more volatile
+projections. 
+
+The `All` and `Flex` sheets are very similar, except they combine players
+across positions. These show low, average, and high points per week compared to
+the baseline player considering all positions on the sheet. To help determine
+the value of positional scarcity in these sheets, the low, average, and high
+projections within the position are also on this sheet – the same values you'd
+find on the individual positional sheets. Since the range is not dependent on the
+basline player, it is the same on all sheets for a given player.
+
+## FAQ
+
+**Do I need to enable macros?**
+
+No, but the buttons to mark a player as drafted will not work.
+There are 2 workarounds for this:
+1. Write any value in the A column of a player that has been drafted.
+   Underneath the button, the cell still exists, and you can write in it.
+   Clearing that cell will mark the player as undrafted (default state).
+2. Load the macro manually. Copy/paste the script saved in `ToggleDraftStatus.vba`.
+
