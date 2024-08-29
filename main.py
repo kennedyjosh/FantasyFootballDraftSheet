@@ -202,7 +202,7 @@ if __name__ == '__main__':
         for row_num in range(1, len(df) + 1):
             button_name = f'Button_{worksheet_name}_{row_num}'
             worksheet.insert_button(f'A{row_num + 1}', {
-                'macro': 'DraftPlayer',
+                'macro': 'ToggleDraftedStatus',
                 'caption': 'Draft',
                 'width': 50,
                 'height': 20,
