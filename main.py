@@ -32,9 +32,10 @@ class PPR:
 
 
 class Player:
-    def __init__(self, name, position):
+    def __init__(self, name, position, team):
         self.name = name
         self.position = position
+        self.team = team
         self.average_projection = {}
         self.high_projection = {}
         self.low_projection = {}
@@ -68,8 +69,8 @@ def parse_csv(file_path, position):
         # First row after headers is garbage
         next(reader)
 
-        # Determine the columns to include (ignore "Team" and "FPTS")
-        relevant_columns = [i for i, header in enumerate(headers) if header not in ("Team", "FPTS")]
+        # Determine the columns to include (ignore "FPTS")
+        relevant_columns = [i for i, header in enumerate(headers) if header not in ("FPTS")]
 
         for row in reader:
             # Some rows at the bottom are empty
@@ -77,7 +78,8 @@ def parse_csv(file_path, position):
                 continue
             if row[0].strip():  # New player entry
                 player_name = row[0].strip()
-                current_player = Player(player_name, position)
+                team = row[1].replace("high", "")
+                current_player = Player(player_name, position, team)
                 current_type = 'average'
                 players[player_name] = current_player
 
@@ -88,7 +90,7 @@ def parse_csv(file_path, position):
 
             # Parse stats into a dictionary, skipping "Team" and "FPTS"
             stats = {}
-            for i in relevant_columns[1:]:  # Skip the first relevant column (Player)
+            for i in relevant_columns[2:]:  # Skip the first two relevant columns (Team, Player)
                 if row[i].strip():
                     stats[headers[i]] = float(row[i].replace(',',''))
 
@@ -141,15 +143,15 @@ if __name__ == '__main__':
 
         # Map value of each player relative to the baseline player, store in CSV for output
         with open(os.path.join("output", f"{position}.csv"), "w") as f:
-            f.write("Name,Low,Avg,High,Range\n" if position not in ["All", "Flex"]
-                    else "Name,Position,Low,Avg,High,Range,Pos. Low,Pos. Avg,Pos. High\n")
+            f.write("Name,Team,Low,Avg,High,Range\n" if position not in ["All", "Flex"]
+                    else "Name,Team,Pos.,Low,Avg,High,Range,Pos. Low,Pos. Avg,Pos. High\n")
             for player in sorted_players[:position_limits[position]]:
                 low, avg, high = player.get_score()
                 if position not in ["All", "Flex"]:
-                    row = [player.name, f"{low - baseline_avg:.1f}", f"{avg - baseline_avg:.1f}",
+                    row = [player.name, player.team, f"{low - baseline_avg:.1f}", f"{avg - baseline_avg:.1f}",
                            f"{high - baseline_avg:.1f}", f"{high - low:.1f}"]
                     f.write(','.join(row) + '\n')
-                    row[0] = position
+                    row[1] = position
                     row = row[:-1]
                     data[player.name] = row
                 else:
@@ -158,11 +160,12 @@ if __name__ == '__main__':
                     if player.name not in data:
                         positional_baseline_player = baseline_players[player.position]
                         positional_baseline_avg = positional_baseline_player.get_score()[1]
-                        row = [player.position, f"{low - positional_baseline_avg:.1f}",
-                               f"{avg - positional_baseline_avg:.1f}", f"{high - positional_baseline_avg:.1f}"]
+                        row = [player.name, player.team, f"{low - positional_baseline_avg:.1f}",
+                               f"{avg - positional_baseline_avg:.1f}",
+                               f"{high - positional_baseline_avg:.1f}"]
                         data[player.name] = row
-                    row = [player.name, data[player.name][0], f"{low - baseline_avg:.1f}", f"{avg - baseline_avg:.1f}",
-                           f"{high - baseline_avg:.1f}", f"{high - low:.1f}"] + data[player.name][1:]
+                    row = [player.name, player.team, player.position, f"{low - baseline_avg:.1f}", f"{avg - baseline_avg:.1f}",
+                           f"{high - baseline_avg:.1f}", f"{high - low:.1f}"] + data[player.name][2:]
                     f.write(','.join(row) + '\n')
 
     # Create a new Excel workbook
@@ -198,9 +201,11 @@ if __name__ == '__main__':
             for j, value in enumerate(df[col_name]):
                 worksheet.write(j + 1, i + 1, value)  # Write the data in rows starting from B2
 
+        # Apply the undrafted format to header row as well
+        worksheet.set_row(0, None, undrafted_format)
+
         # Add a button in column A for each player
         for row_num in range(1, len(df) + 1):
-            button_name = f'Button_{worksheet_name}_{row_num}'
             worksheet.insert_button(f'A{row_num + 1}', {
                 'macro': 'ToggleDraftedStatus',
                 'caption': 'Draft',
@@ -230,9 +235,13 @@ if __name__ == '__main__':
             max_name_length = df["Name"].str.len().max()
             worksheet.set_column(1, 1, max_name_length + 2)  # Column 'B' (index 1)
 
+        # # Decrease width of Team and Position columns
+        # worksheet.set_column(1, 2, len("Team"))
+        # worksheet.set_column(1, 3, len("Position"))
+
         # Apply heatmap to the columns except "Name" and "Position"
         for i, column_name in enumerate(df.columns):
-            if column_name not in ["Name", "Position"]:
+            if column_name not in ["Name", "Team", "Position"]:
                 col_index = i + 1  # Adjusted index for xlsxwriter
                 if column_name == "Range":
                     worksheet.conditional_format(1, col_index, len(df), col_index, {

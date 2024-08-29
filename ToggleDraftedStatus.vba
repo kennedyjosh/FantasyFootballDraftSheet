@@ -8,6 +8,10 @@ Sub ToggleDraftedStatus()
     Dim newButtonText As String
     Dim newCellText As String
 
+    ' Define 1-based index of the column containing position
+    Dim positionColumn As Integer
+    positionColumn = 4
+
     ' Get the button that was clicked
     Set button = ActiveSheet.Shapes(Application.Caller)
 
@@ -21,7 +25,7 @@ Sub ToggleDraftedStatus()
     Else
         newButtonText = "Draft"
         newCellText = ""
-    EndIf
+    End If
 
     ' Update the ActiveSheet
     button.OLEFormat.Object.Caption = newButtonText
@@ -30,7 +34,7 @@ Sub ToggleDraftedStatus()
     ' Determine the target sheets to update
     If ActiveSheet.Name = "All" Then
         ' ActiveSheet is All; Update the positional sheet and maybe the Flex sheet
-        targetSheetName = ActiveSheet.Cells(button.TopLeftCell.Row, 3).Value2
+        targetSheetName = ActiveSheet.Cells(button.TopLeftCell.Row, positionColumn).Value2
         Set targetSheet = ThisWorkbook.Sheets(targetSheetName)
         UpdateButtonCaption targetSheet, playerName, newButtonText, newCellText
         ' If the position is anything other than QB, update the Flex sheet too
@@ -40,7 +44,7 @@ Sub ToggleDraftedStatus()
         End If
     ElseIf ActiveSheet.Name = "Flex" Then
         ' ActiveSheet is Flex; Update the positional sheet and the All sheet
-        targetSheetName = ActiveSheet.Cells(button.TopLeftCell.Row, 3).Value2
+        targetSheetName = ActiveSheet.Cells(button.TopLeftCell.Row, positionColumn).Value2
         Set targetSheet = ThisWorkbook.Sheets(targetSheetName)
         UpdateButtonCaption targetSheet, playerName, newButtonText, newCellText
         ' All players from the Flex sheet will also be on All
@@ -87,4 +91,5 @@ Sub UpdateButtonCaption(ws As Worksheet, playerName As String, btnText As String
         End If
     End If
 End Sub
+
 
