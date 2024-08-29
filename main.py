@@ -168,6 +168,19 @@ if __name__ == '__main__':
     # Create a new Excel workbook
     workbook = xlsxwriter.Workbook("DraftSheet.xlsm")
 
+    # Define cell formats
+    undrafted_format = workbook.add_format({
+        'bold': True,
+        'font_color': 'black',
+        'font_size': 14
+    })
+    drafted_format = workbook.add_format({
+        'bold': False,
+        'font_color': 'gray',
+        'font_size': 14,
+        'font_strikeout': True
+    })
+
     for file_name in sorted(os.listdir("output")):
         if not file_name.endswith(".csv"):
             continue
@@ -198,12 +211,19 @@ if __name__ == '__main__':
             })
 
             # Apply the undrafted format to each row initially
-            undrafted_format = workbook.add_format({
-                'bold': True,
-                'font_color': 'black',
-                'font_size': 14
-            })
             worksheet.set_row(row_num, None, undrafted_format)
+
+            # Apply conditional formatting based on the value in column A of the current row
+            worksheet.conditional_format(f'B{row_num + 1}:Z{row_num + 1}', {
+                'type': 'formula',
+                'criteria': f'=LEN($A{row_num + 1})>0',
+                'format': drafted_format
+            })
+            worksheet.conditional_format(f'B{row_num + 1}:Z{row_num + 1}', {
+                'type': 'formula',
+                'criteria': f'=LEN($A{row_num + 1})=0',
+                'format': undrafted_format
+            })
 
         # Set the width of the "Name" column to fit the longest name
         if "Name" in df.columns:
