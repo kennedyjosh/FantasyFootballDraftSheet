@@ -210,7 +210,7 @@ if __name__ == '__main__':
         else:
             # Process a combination of positions
             # Set headers
-            rows = [f"Name,Team,Pos.,Low,Avg,High,Range,{platform_name}\n"]
+            rows = [f"Name,Pos.,Team,Low,Avg,High,Range,{platform_name}\n"]
 
             # Collect all positional scores for the players
             players_with_scores = []
@@ -235,7 +235,7 @@ if __name__ == '__main__':
                 # If rank data is missing, make rank_diff very small, so it's obvious on the sheet
                 rank_diff = -9999 if player.overall_rank == -1 else player.overall_rank - (rank + 1)
                 # Add row
-                rows.append(','.join([player.name, player.team, player.position,
+                rows.append(','.join([player.name, player.position, player.team,
                                       f"{low_relative:.1f}", f"{avg_relative:.1f}",
                                       f"{high_relative:.1f}", f"{range_:.1f}", f"{rank_diff}\n"]))
 
@@ -258,6 +258,16 @@ if __name__ == '__main__':
         'font_size': 14,
         'font_strikeout': True
     })
+    round_end_format = workbook.add_format({
+        'font_size': 14,
+        'bottom': 2  # thick bottom border
+    })
+
+    # Define formats for each position with new colors
+    qb_format = workbook.add_format({'bg_color': '#FFD700'})  # Gold for QB
+    rb_format = workbook.add_format({'bg_color': '#87CEEB'})  # Sky Blue for RB
+    wr_format = workbook.add_format({'bg_color': '#E59866'})  # Light Brown for WR
+    te_format = workbook.add_format({'bg_color': '#E6E6FA'})  # Lavender for TE
 
     for file_name in sorted(os.listdir("output")):
         if not file_name.endswith(".csv"):
@@ -291,7 +301,11 @@ if __name__ == '__main__':
             })
 
             # Apply the undrafted format to each row initially
-            worksheet.set_row(row_num, None, undrafted_format)
+            worksheet.set_row(row_num, cell_format=undrafted_format)
+
+            # Apply a thick border to help estimate number of rounds
+            if row_num % 12 == 0:
+                worksheet.set_row(row_num, cell_format=round_end_format)
 
             # Apply conditional formatting based on the value in column A of the current row
             worksheet.conditional_format(f'B{row_num + 1}:Z{row_num + 1}', {
@@ -303,6 +317,35 @@ if __name__ == '__main__':
                 'type': 'formula',
                 'criteria': f'=LEN($A{row_num + 1})=0',
                 'format': undrafted_format
+            })
+
+        # Apply position-specific colors to the "Position" column if it exists
+        if "Pos." in df.columns:
+            position_col_index = df.columns.get_loc("Pos.") + 1  # Adjust for xlsxwriter (1-based index)
+
+            worksheet.conditional_format(1, position_col_index, len(df), position_col_index, {
+                'type': 'cell',
+                'criteria': 'equal to',
+                'value': '"QB"',
+                'format': qb_format
+            })
+            worksheet.conditional_format(1, position_col_index, len(df), position_col_index, {
+                'type': 'cell',
+                'criteria': 'equal to',
+                'value': '"RB"',
+                'format': rb_format
+            })
+            worksheet.conditional_format(1, position_col_index, len(df), position_col_index, {
+                'type': 'cell',
+                'criteria': 'equal to',
+                'value': '"WR"',
+                'format': wr_format
+            })
+            worksheet.conditional_format(1, position_col_index, len(df), position_col_index, {
+                'type': 'cell',
+                'criteria': 'equal to',
+                'value': '"TE"',
+                'format': te_format
             })
 
         # Set the width of the "Name" column to fit the longest name

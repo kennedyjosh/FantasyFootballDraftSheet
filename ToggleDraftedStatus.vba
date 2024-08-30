@@ -10,7 +10,7 @@ Sub ToggleDraftedStatus()
 
     ' Define 1-based index of the column containing position
     Dim positionColumn As Integer
-    positionColumn = 4
+    positionColumn = 3
 
     ' Get the button that was clicked
     Set button = ActiveSheet.Shapes(Application.Caller)
