@@ -12,9 +12,15 @@ a custom draft sheet based on those projections.
    except with slightly different headers that can be seen at the top
    of the code (`main.py`). It is recommended to provide low, average, and 
    high projections, however only the average projections are absolutely necessary.
-2. Run `main.py`. Don't forget to install the requirements 
+2. Put a CSV file with the rankings from your drafting platform in the 
+   `draft_platform_rankings` folder. The CSV file should have 3 columns: `Name`,
+   `Position`, and the name of the platform which will show up on the final draft sheet.
+   The column containing the name of the platform should hold that player's overall
+   rank on that platform. **You can skip this step, but** the related column
+   will be missing on your draft sheet, so it isn't recommended.
+3. Run `main.py`. Don't forget to install the requirements 
    (`pip install -r requirements.txt`)
-3. Open `DraftSheet.xlsm` (enable macros) and you're ready to draft!
+4. Open `DraftSheet.xlsm` (enable macros) and you're ready to draft!
    It's normal for the spreadsheet to take a long time to load when
    first opening it, but once it's loaded it'll be quick.
 
@@ -38,6 +44,13 @@ It is calculated by subtracting the player's lowest projection from their highes
 projection of points scored per week. Players with a lower range have more
 consistent projections, while players with a higher range have more volatile
 projections. 
+
+The last column, which should have the same name as your drafting plaform,
+shows the difference between your projected rank and the platform's projected rank.
+This can help you know if you can wait another round before a player shows up on 
+your opponents' screens (assuming they don't have their own top-tier draft sheet)!
+If the difference is -9999, this is a special case where that player is not ranked on
+the drafting platform (or the data could be missing from the CSV file).
 
 The `Overall` sheet combines all the position info to give an overall draft
 ranking. The low, average, and high projections are still relative to the baseline

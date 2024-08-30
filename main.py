@@ -3,6 +3,13 @@ import os
 import pandas as pd
 import xlsxwriter
 
+
+# TODO: need something better for when names differ slightly
+#  between projections and draft platform rankings
+def fix_name(name):
+    return name.replace("Jr.", "").replace("Sr.", "").replace("III", "").replace("II", "").strip()
+
+
 class PPR:
     weights = {
         "PASS_YDS": 0.04,
@@ -32,10 +39,12 @@ class PPR:
 
 
 class Player:
-    def __init__(self, name, position, team):
+    def __init__(self, name, position, team, platform_ranking):
         self.name = name
         self.position = position
         self.team = team
+        self.overall_rank = platform_ranking[0]
+        self.position_rank = platform_ranking[1]
         self.average_projection = {}
         self.high_projection = {}
         self.low_projection = {}
@@ -67,7 +76,7 @@ def get_baseline_projections(player, baseline_player):
     return low_relative, avg_relative, high_relative, high - low
 
 
-def parse_csv(file_path, position):
+def parse_csv(file_path, position, platform_rankings):
     players = {}
     current_player = None
     current_type = None
@@ -89,7 +98,14 @@ def parse_csv(file_path, position):
             if row[0].strip():  # New player entry
                 player_name = row[0].strip()
                 team = row[1].replace("high", "")
-                current_player = Player(player_name, position, team)
+                if player_name not in platform_rankings:
+                    if (fixed_name := fix_name(player_name)) in platform_rankings:
+                        platform_rankings[player_name] = platform_rankings[fixed_name]
+                        del platform_rankings[fixed_name]
+                    else:
+                        print(f"Error: {player_name} not found in platform rankings")
+                        platform_rankings[player_name] = (-1, -1)
+                current_player = Player(player_name, position, team, platform_rankings[player_name])
                 current_type = 'average'
                 players[player_name] = current_player
 
@@ -110,13 +126,39 @@ def parse_csv(file_path, position):
 
 
 if __name__ == '__main__':
+    # Process and store rankings from the draft platform (for comparison)
+    platform_rankings = {}  # player : (overall_rank, position_rank)
+    ranking_data_dir = "draft_platform_rankings"
+    for f in os.listdir(ranking_data_dir):
+        if not f.endswith(".csv"):
+            continue
+
+        with open(os.path.join(ranking_data_dir, f), mode='r', encoding='utf-8-sig') as file:
+            reader = csv.reader(file)
+            headers = next(reader)
+            assert len(headers) == 3, "Draft platform rankings file should only have 3 columns"
+
+            # There should be 3 columns: one "Name", one "Position", and the other with the name of the platform
+            name_col = headers.index("Name")
+            position_col = headers.index("Position")
+            rank_col = set(range(len(headers))).difference({name_col, position_col}).pop()
+            platform_name = headers[rank_col]
+
+            # keep counters for each position to determine position rank
+            pos_rank = {}
+            for i, row in enumerate(reader):
+                if (position := row[position_col]) not in pos_rank:
+                    pos_rank[position] = 1
+                platform_rankings[row[name_col]] = (i + 1, pos_rank[position])
+                pos_rank[position] += 1
+
     # Gather projections from Fantasy Pros
     data_dir = "fp_data"
     players = {"QB": {}, "TE": {}, "RB": {}, "WR": {}, "Overall": {}}
     for f in os.listdir(data_dir):
         if f.endswith(".csv"):
             position = f.split(".")[0].split("_")[-1]
-            player_dict = parse_csv(os.path.join(data_dir, f), position)
+            player_dict = parse_csv(os.path.join(data_dir, f), position, platform_rankings)
             players[position] = player_dict
             players["Overall"].update(player_dict)
 
@@ -146,7 +188,7 @@ if __name__ == '__main__':
         if position in ["QB", "TE", "RB", "WR"]:
             # Process a single position
             # Set headers
-            rows = ["Name,Team,Low,Avg,High,Range\n"]
+            rows = [f"Name,Team,Low,Avg,High,Range,{platform_name}\n"]
 
             # Sort players by their projected score
             sorted_players = sorted(players[position].values(), key=lambda P: P.get_score()[1], reverse=True)
@@ -155,17 +197,20 @@ if __name__ == '__main__':
             baseline_players[position] = baseline_player
 
             # Generate one row per player, up to the positional limit for players shown
-            for player in sorted_players[:position_limits[position]]:
+            for rank, player in enumerate(sorted_players[:position_limits[position]]):
                 low_relative, avg_relative, high_relative, range_ = get_baseline_projections(player, baseline_player)
-                rows.append(','.join([player.name, player.team, f"{low_relative:.1f}",
-                             f"{avg_relative:.1f}", f"{high_relative:.1f}", f"{range_:.1f}\n"]))
+                # Calculate difference between projected rank and rank on drafting platform
+                # If rank data is missing, make rank_diff very small, so it's obvious on the sheet
+                rank_diff = -9999 if player.position_rank == -1 else player.position_rank - (rank + 1)
+                rows.append(','.join([player.name, player.team, f"{low_relative:.1f}", f"{avg_relative:.1f}",
+                                      f"{high_relative:.1f}", f"{range_:.1f}", f"{rank_diff}\n"]))
                 # Save this data to use when processing a combined position sheet
                 data[player.name] = (low_relative, avg_relative, high_relative, range_)
 
         else:
             # Process a combination of positions
             # Set headers
-            rows = ["Name,Team,Pos.,Low,Avg,High,Range\n"]
+            rows = [f"Name,Team,Pos.,Low,Avg,High,Range,{platform_name}\n"]
 
             # Collect all positional scores for the players
             players_with_scores = []
@@ -182,13 +227,17 @@ if __name__ == '__main__':
             sorted_players = sorted(players_with_scores, key=lambda t: t[1][1], reverse=True)
 
             # Generate one row per player, up to the positional limit for players shown
-            for player_tuple in sorted_players[:position_limits[position]]:
+            for rank, player_tuple in enumerate(sorted_players[:position_limits[position]]):
                 # Unpack info from tuples
                 player, player_info = player_tuple
                 low_relative, avg_relative, high_relative, range_ = player_info
+                # Calculate difference between projected rank and rank on drafting platform
+                # If rank data is missing, make rank_diff very small, so it's obvious on the sheet
+                rank_diff = -9999 if player.overall_rank == -1 else player.overall_rank - (rank + 1)
                 # Add row
-                rows.append(','.join([player.name, player.team, player.position, f"{low_relative:.1f}",
-                             f"{avg_relative:.1f}", f"{high_relative:.1f}", f"{range_:.1f}\n"]))
+                rows.append(','.join([player.name, player.team, player.position,
+                                      f"{low_relative:.1f}", f"{avg_relative:.1f}",
+                                      f"{high_relative:.1f}", f"{range_:.1f}", f"{rank_diff}\n"]))
 
         # Write results to CSV
         with open(os.path.join("output", f"{position}.csv"), "w") as f:
