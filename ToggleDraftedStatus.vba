@@ -32,34 +32,15 @@ Sub ToggleDraftedStatus()
     ActiveSheet.Cells(button.TopLeftCell.Row, 1).Value = newCellText
 
     ' Determine the target sheets to update
-    If ActiveSheet.Name = "All" Then
-        ' ActiveSheet is All; Update the positional sheet and maybe the Flex sheet
+    If ActiveSheet.Name = "Overall" Then
+        ' ActiveSheet is Overall; Update the positional sheet
         targetSheetName = ActiveSheet.Cells(button.TopLeftCell.Row, positionColumn).Value2
         Set targetSheet = ThisWorkbook.Sheets(targetSheetName)
-        UpdateButtonCaption targetSheet, playerName, newButtonText, newCellText
-        ' If the position is anything other than QB, update the Flex sheet too
-        If targetSheetName <> "QB" Then
-            Set targetSheet = ThisWorkbook.Sheets("Flex")
-            UpdateButtonCaption targetSheet, playerName, newButtonText, newCellText
-        End If
-    ElseIf ActiveSheet.Name = "Flex" Then
-        ' ActiveSheet is Flex; Update the positional sheet and the All sheet
-        targetSheetName = ActiveSheet.Cells(button.TopLeftCell.Row, positionColumn).Value2
-        Set targetSheet = ThisWorkbook.Sheets(targetSheetName)
-        UpdateButtonCaption targetSheet, playerName, newButtonText, newCellText
-        ' All players from the Flex sheet will also be on All
-        Set targetSheet = ThisWorkbook.Sheets("All")
         UpdateButtonCaption targetSheet, playerName, newButtonText, newCellText
     Else
-        ' ActiveSheet is the positional sheet; Update the All sheet and maybe the Flex sheet
-        Set targetSheet = ThisWorkbook.Sheets("All")
+        ' ActiveSheet is the positional sheet; Update the Overall sheet and maybe the Flex sheet
+        Set targetSheet = ThisWorkbook.Sheets("Overall")
         UpdateButtonCaption targetSheet, playerName, newButtonText, newCellText
-        ' The Flex sheet only needs to be updated if the position is not QB
-        targetSheetName = ActiveSheet.Name
-        If targetSheetName <> "QB" Then
-            Set targetSheet = ThisWorkbook.Sheets("Flex")
-            UpdateButtonCaption targetSheet, playerName, newButtonText, newCellText
-        End If
     End If
 End Sub
 
@@ -91,5 +72,4 @@ Sub UpdateButtonCaption(ws As Worksheet, playerName As String, btnText As String
         End If
     End If
 End Sub
-
 

@@ -57,6 +57,16 @@ class Player:
         return f"Player({self.position} {self.name})"
 
 
+def get_baseline_projections(player, baseline_player):
+    # Returns projections relative to the baseline player, plus the range
+    baseline_avg = baseline_player.get_score()[1]
+    low, avg, high = player.get_score()
+    low_relative = low - baseline_avg
+    avg_relative = avg - baseline_avg
+    high_relative = high - baseline_avg
+    return low_relative, avg_relative, high_relative, high - low
+
+
 def parse_csv(file_path, position):
     players = {}
     current_player = None
@@ -102,15 +112,13 @@ def parse_csv(file_path, position):
 if __name__ == '__main__':
     # Gather projections from Fantasy Pros
     data_dir = "fp_data"
-    players = {"QB": {}, "TE": {}, "RB": {}, "WR": {}, "All": {}, "Flex": {}}
+    players = {"QB": {}, "TE": {}, "RB": {}, "WR": {}, "Overall": {}}
     for f in os.listdir(data_dir):
         if f.endswith(".csv"):
             position = f.split(".")[0].split("_")[-1]
             player_dict = parse_csv(os.path.join(data_dir, f), position)
             players[position] = player_dict
-            players["All"].update(player_dict)
-            if position != "QB":
-                players["Flex"].update(player_dict)
+            players["Overall"].update(player_dict)
 
     # Baseline is the number of that position drafted through 9 round last year plus 1
     baseline = {
@@ -119,8 +127,7 @@ if __name__ == '__main__':
         "RB": 39,
         "WR": 49
     }
-    baseline["All"] = sum(baseline.values())
-    baseline["Flex"] = sum(baseline.values()) - baseline["QB"]
+    baseline["Overall"] = sum(baseline.values())
     # Only keep a certain amount of player projections per position
     # Rule of thumb here will be double the amount needed for rosters
     position_limits = {
@@ -129,44 +136,63 @@ if __name__ == '__main__':
         "RB": 36 * 2,
         "WR": 48 * 2
     }
-    position_limits["All"] = sum(position_limits.values())
-    position_limits["Flex"] = sum(position_limits.values()) - position_limits["QB"]
+    position_limits["Overall"] = sum(position_limits.values())
     # Find projection of baseline player at every position
     # This is what we will compare against
-    data = {}  # player_name : positional_values; to use for All sheet
+    data = {}  # player_name : (pos, pos_low_proj, pos_avg_proj, pos_high_proj)
     baseline_players = {}
-    for position in baseline.keys():
-        sorted_players = sorted(players[position].values(), key=lambda P: P.get_score()[1], reverse=True)
-        baseline_player = sorted_players[baseline[position]]
-        baseline_avg = baseline_player.get_score()[1]
-        baseline_players[position] = baseline_player
+    # Loop through positions in reverse order so that combined position categories process last
+    for position in sorted(baseline.keys(), reverse=True):
+        if position in ["QB", "TE", "RB", "WR"]:
+            # Process a single position
+            # Set headers
+            rows = ["Name,Team,Low,Avg,High,Range\n"]
 
-        # Map value of each player relative to the baseline player, store in CSV for output
-        with open(os.path.join("output", f"{position}.csv"), "w") as f:
-            f.write("Name,Team,Low,Avg,High,Range\n" if position not in ["All", "Flex"]
-                    else "Name,Team,Pos.,Low,Avg,High,Range,Pos. Low,Pos. Avg,Pos. High\n")
+            # Sort players by their projected score
+            sorted_players = sorted(players[position].values(), key=lambda P: P.get_score()[1], reverse=True)
+            # Save baseline player for this position
+            baseline_player = sorted_players[baseline[position]]
+            baseline_players[position] = baseline_player
+
+            # Generate one row per player, up to the positional limit for players shown
             for player in sorted_players[:position_limits[position]]:
-                low, avg, high = player.get_score()
-                if position not in ["All", "Flex"]:
-                    row = [player.name, player.team, f"{low - baseline_avg:.1f}", f"{avg - baseline_avg:.1f}",
-                           f"{high - baseline_avg:.1f}", f"{high - low:.1f}"]
-                    f.write(','.join(row) + '\n')
-                    row[1] = position
-                    row = row[:-1]
-                    data[player.name] = row
+                low_relative, avg_relative, high_relative, range_ = get_baseline_projections(player, baseline_player)
+                rows.append(','.join([player.name, player.team, f"{low_relative:.1f}",
+                             f"{avg_relative:.1f}", f"{high_relative:.1f}", f"{range_:.1f}\n"]))
+                # Save this data to use when processing a combined position sheet
+                data[player.name] = (low_relative, avg_relative, high_relative, range_)
+
+        else:
+            # Process a combination of positions
+            # Set headers
+            rows = ["Name,Team,Pos.,Low,Avg,High,Range\n"]
+
+            # Collect all positional scores for the players
+            players_with_scores = []
+            for player in players[position].values():
+                if player.name in data:
+                    players_with_scores.append((player, data[player.name]))
                 else:
-                    # There is a chance a player in the "All" sheet was not good enough
-                    # to be on their own position sheet
-                    if player.name not in data:
-                        positional_baseline_player = baseline_players[player.position]
-                        positional_baseline_avg = positional_baseline_player.get_score()[1]
-                        row = [player.name, player.team, f"{low - positional_baseline_avg:.1f}",
-                               f"{avg - positional_baseline_avg:.1f}",
-                               f"{high - positional_baseline_avg:.1f}"]
-                        data[player.name] = row
-                    row = [player.name, player.team, player.position, f"{low - baseline_avg:.1f}", f"{avg - baseline_avg:.1f}",
-                           f"{high - baseline_avg:.1f}", f"{high - low:.1f}"] + data[player.name][2:]
-                    f.write(','.join(row) + '\n')
+                    info = get_baseline_projections(player, baseline_players[player.position])
+                    data[player.name] = info
+                    players_with_scores.append((player, info))
+
+            # Sort players by their avg relative projected score
+            # This will create a ranking for positional scarcity
+            sorted_players = sorted(players_with_scores, key=lambda t: t[1][1], reverse=True)
+
+            # Generate one row per player, up to the positional limit for players shown
+            for player_tuple in sorted_players[:position_limits[position]]:
+                # Unpack info from tuples
+                player, player_info = player_tuple
+                low_relative, avg_relative, high_relative, range_ = player_info
+                # Add row
+                rows.append(','.join([player.name, player.team, player.position, f"{low_relative:.1f}",
+                             f"{avg_relative:.1f}", f"{high_relative:.1f}", f"{range_:.1f}\n"]))
+
+        # Write results to CSV
+        with open(os.path.join("output", f"{position}.csv"), "w") as f:
+            f.writelines(rows)
 
     # Create a new Excel workbook
     workbook = xlsxwriter.Workbook("DraftSheet.xlsm")
@@ -235,11 +261,7 @@ if __name__ == '__main__':
             max_name_length = df["Name"].str.len().max()
             worksheet.set_column(1, 1, max_name_length + 2)  # Column 'B' (index 1)
 
-        # # Decrease width of Team and Position columns
-        # worksheet.set_column(1, 2, len("Team"))
-        # worksheet.set_column(1, 3, len("Position"))
-
-        # Apply heatmap to the columns except "Name" and "Position"
+        # Apply heatmap to the columns except "Name", "Team", and "Position"
         for i, column_name in enumerate(df.columns):
             if column_name not in ["Name", "Team", "Position"]:
                 col_index = i + 1  # Adjusted index for xlsxwriter
