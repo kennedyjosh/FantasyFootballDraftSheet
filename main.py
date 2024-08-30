@@ -103,7 +103,8 @@ def parse_csv(file_path, position, platform_rankings):
                         platform_rankings[player_name] = platform_rankings[fixed_name]
                         del platform_rankings[fixed_name]
                     else:
-                        print(f"Error: {player_name} not found in platform rankings")
+                        if len(platform_rankings) > 0:
+                            print(f"Error: {player_name} not found in platform rankings")
                         platform_rankings[player_name] = (-1, -1)
                 current_player = Player(player_name, position, team, platform_rankings[player_name])
                 current_type = 'average'
@@ -125,42 +126,50 @@ def parse_csv(file_path, position, platform_rankings):
     return players
 
 
-if __name__ == '__main__':
+def parse_platform_rankings(file_path):
     # Process and store rankings from the draft platform (for comparison)
     platform_rankings = {}  # player : (overall_rank, position_rank)
+    with open(file_path, mode='r', encoding='utf-8-sig') as file:
+        reader = csv.reader(file)
+        headers = next(reader)
+        assert len(headers) == 3, "Draft platform rankings file should only have 3 columns"
+
+        # There should be 3 columns: one "Name", one "Position", and the other with the name of the platform
+        name_col = headers.index("Name")
+        position_col = headers.index("Position")
+        rank_col = set(range(len(headers))).difference({name_col, position_col}).pop()
+        platform_name = headers[rank_col]
+
+        # keep counters for each position to determine position rank
+        pos_rank = {}
+        for i, row in enumerate(reader):
+            if (position := row[position_col]) not in pos_rank:
+                pos_rank[position] = 1
+            platform_rankings[row[name_col]] = (i + 1, pos_rank[position])
+            pos_rank[position] += 1
+    return platform_name, platform_rankings
+
+
+if __name__ == '__main__':
+    # Process and store rankings from the draft platform (for comparison)
     ranking_data_dir = "draft_platform_rankings"
+    platform_name = None
+    platform_rankings = {}
     for f in os.listdir(ranking_data_dir):
         if not f.endswith(".csv"):
             continue
-
-        with open(os.path.join(ranking_data_dir, f), mode='r', encoding='utf-8-sig') as file:
-            reader = csv.reader(file)
-            headers = next(reader)
-            assert len(headers) == 3, "Draft platform rankings file should only have 3 columns"
-
-            # There should be 3 columns: one "Name", one "Position", and the other with the name of the platform
-            name_col = headers.index("Name")
-            position_col = headers.index("Position")
-            rank_col = set(range(len(headers))).difference({name_col, position_col}).pop()
-            platform_name = headers[rank_col]
-
-            # keep counters for each position to determine position rank
-            pos_rank = {}
-            for i, row in enumerate(reader):
-                if (position := row[position_col]) not in pos_rank:
-                    pos_rank[position] = 1
-                platform_rankings[row[name_col]] = (i + 1, pos_rank[position])
-                pos_rank[position] += 1
+        platform_name, platform_rankings = parse_platform_rankings(os.path.join(ranking_data_dir, f))
 
     # Gather projections from Fantasy Pros
     data_dir = "fp_data"
     players = {"QB": {}, "TE": {}, "RB": {}, "WR": {}, "Overall": {}}
     for f in os.listdir(data_dir):
-        if f.endswith(".csv"):
-            position = f.split(".")[0].split("_")[-1]
-            player_dict = parse_csv(os.path.join(data_dir, f), position, platform_rankings)
-            players[position] = player_dict
-            players["Overall"].update(player_dict)
+        if not f.endswith(".csv"):
+            continue
+        position = f.split(".")[0].split("_")[-1]
+        player_dict = parse_csv(os.path.join(data_dir, f), position, platform_rankings)
+        players[position] = player_dict
+        players["Overall"].update(player_dict)
 
     # Baseline is the number of that position drafted through 9 round last year plus 1
     baseline = {
@@ -179,6 +188,7 @@ if __name__ == '__main__':
         "WR": 48 * 2
     }
     position_limits["Overall"] = sum(position_limits.values())
+
     # Find projection of baseline player at every position
     # This is what we will compare against
     data = {}  # player_name : (pos, pos_low_proj, pos_avg_proj, pos_high_proj)
@@ -247,20 +257,21 @@ if __name__ == '__main__':
     workbook = xlsxwriter.Workbook("DraftSheet.xlsm")
 
     # Define cell formats
-    undrafted_format = workbook.add_format({
-        'bold': True,
-        'font_color': 'black',
+    base_format = workbook.add_format({
         'font_size': 14
-    })
-    drafted_format = workbook.add_format({
-        'bold': False,
-        'font_color': 'gray',
-        'font_size': 14,
-        'font_strikeout': True
     })
     round_end_format = workbook.add_format({
         'font_size': 14,
         'bottom': 2  # thick bottom border
+    })
+    undrafted_format = workbook.add_format({
+        'bold': True,
+        'font_color': 'black',
+    })
+    drafted_format = workbook.add_format({
+        'bold': False,
+        'font_color': 'gray',
+        'font_strikeout': True
     })
 
     # Define formats for each position with new colors
@@ -300,8 +311,8 @@ if __name__ == '__main__':
                 'y_offset': 2
             })
 
-            # Apply the undrafted format to each row initially
-            worksheet.set_row(row_num, cell_format=undrafted_format)
+            # Apply the base format to each row initially
+            worksheet.set_row(row_num, cell_format=base_format)
 
             # Apply a thick border to help estimate number of rounds
             if row_num % 12 == 0:
