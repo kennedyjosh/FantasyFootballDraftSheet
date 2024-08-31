@@ -4,6 +4,11 @@ import pandas as pd
 import xlsxwriter
 
 
+## TODO: this should probably go somewhere else
+GOOD_COLOR = "#00FF00"
+NEUTRAL_COLOR = "#FFFFFF"
+BAD_COLOR = "#FF6347"
+
 # TODO: need something better for when names differ slightly
 #  between projections and draft platform rankings
 def fix_name(name):
@@ -150,6 +155,23 @@ def parse_platform_rankings(file_path):
     return platform_name, platform_rankings
 
 
+def parse_team_rankings(file_path):
+    try:
+        f = open(file_path, "r", encoding="latin-1")
+    except:
+        return {}
+    else:
+        with  f:
+            reader = csv.reader(f)
+            next(reader)  # skip headers
+
+            team_rankings = {}
+            for i, row in enumerate(reader):
+                team_rankings[row[0]] = i + 1
+
+        return team_rankings
+
+
 if __name__ == '__main__':
     # Process and store rankings from the draft platform (for comparison)
     ranking_data_dir = "draft_platform_rankings"
@@ -253,6 +275,9 @@ if __name__ == '__main__':
         with open(os.path.join("output", f"{position}.csv"), "w") as f:
             f.writelines(rows)
 
+    # parse team rankings
+    team_rankings = parse_team_rankings(os.path.join("notes", "teams.csv"))
+
     # Create a new Excel workbook
     workbook = xlsxwriter.Workbook("DraftSheet.xlsm")
 
@@ -276,9 +301,9 @@ if __name__ == '__main__':
 
     # Define formats for each position with new colors
     qb_format = workbook.add_format({'bg_color': '#FFD700'})  # Gold for QB
-    rb_format = workbook.add_format({'bg_color': '#87CEEB'})  # Sky Blue for RB
-    wr_format = workbook.add_format({'bg_color': '#E59866'})  # Light Brown for WR
-    te_format = workbook.add_format({'bg_color': '#E6E6FA'})  # Lavender for TE
+    rb_format = workbook.add_format({'bg_color': '#66CCFF'})  # Blue for RB
+    wr_format = workbook.add_format({'bg_color': '#CC99FF'})  # Purple for WR
+    te_format = workbook.add_format({'bg_color': '#FF9900'})  # Orange for TE
 
     for file_name in sorted(os.listdir("output")):
         if not file_name.endswith(".csv"):
@@ -364,6 +389,52 @@ if __name__ == '__main__':
             max_name_length = df["Name"].str.len().max()
             worksheet.set_column(1, 1, max_name_length + 2)  # Column 'B' (index 1)
 
+        # Apply conditional formatting to the "Team" column based on team rank (if they exist)
+        if len(team_rankings) > 0:
+            min_rank = min(team_rankings.values())
+            max_rank = max(team_rankings.values())
+
+            # Get 32 colors from GOOD_COLOR, NEUTRAL_COLOR, BAD_COLOR range
+            good_rgb = (int(GOOD_COLOR[1:3], 16), int(GOOD_COLOR[3:5], 16), int(GOOD_COLOR[5:7], 16))
+            neutral_rgb = (int(NEUTRAL_COLOR[1:3], 16), int(NEUTRAL_COLOR[3:5], 16), int(NEUTRAL_COLOR[5:7], 16))
+            bad_rgb = (int(BAD_COLOR[1:3], 16), int(BAD_COLOR[3:5], 16), int(BAD_COLOR[5:7], 16))
+            half_of_rankings = len(team_rankings) / 2
+            step_btwn_good_and_neutral = ((neutral_rgb[0] - good_rgb[0]) / half_of_rankings,
+                                          (neutral_rgb[1] - good_rgb[1]) / half_of_rankings,
+                                          (neutral_rgb[2] - good_rgb[2]) / half_of_rankings,)
+            step_btwn_neutral_and_bad = ((neutral_rgb[0] - bad_rgb[0]) / half_of_rankings,
+                                          (neutral_rgb[1] - bad_rgb[1]) / half_of_rankings,
+                                          (neutral_rgb[2] - bad_rgb[2]) / half_of_rankings,)
+            color_range = []
+            for i in range(len(team_rankings)):
+                if i < half_of_rankings:
+                    rgb = (round(good_rgb[0] + (i * step_btwn_good_and_neutral[0])),
+                           round(good_rgb[1] + (i * step_btwn_good_and_neutral[1])),
+                           round(good_rgb[2] + (i * step_btwn_good_and_neutral[2])))
+                    color_range.append(f"#{rgb[0]:02X}{rgb[1]:02X}{rgb[2]:02X}")
+                elif i == half_of_rankings:
+                    color_range.append(NEUTRAL_COLOR)
+                else:
+                    i -= round(half_of_rankings)
+                    rgb = (round(neutral_rgb[0] - (i * step_btwn_neutral_and_bad[0])),
+                           round(neutral_rgb[1] - (i * step_btwn_neutral_and_bad[1])),
+                           round(neutral_rgb[2] - (i * step_btwn_neutral_and_bad[2])))
+                    color_range.append(f"#{rgb[0]:02X}{rgb[1]:02X}{rgb[2]:02X}")
+
+            if "Team" in df.columns:
+                team_col_index = df.columns.get_loc("Team") + 1  # Adjust for xlsxwriter (1-based index)
+                for row_num in range(1, len(df) + 1):
+                    team_name = df.at[row_num - 1, "Team"]  # Get the team name for this row
+                    if team_name in team_rankings:
+                        # Determine color based on rank
+                        bg_color = color_range[team_rankings[team_name] - 1]
+                        team_format = workbook.add_format({
+                            'font_size': 14,
+                            'bg_color': bg_color,
+                            'bottom': 0 if row_num % 12 else 2
+                        })
+                        worksheet.write(row_num, team_col_index, team_name, team_format)
+
         # Apply heatmap to the columns except "Name", "Team", and "Position"
         for i, column_name in enumerate(df.columns):
             if column_name not in ["Name", "Team", "Position"]:
@@ -373,24 +444,24 @@ if __name__ == '__main__':
                         'type': '3_color_scale',
                         'min_type': 'percentile',
                         'min_value': 0,
-                        'min_color': '#00FF00',  # Green for low values
+                        'min_color': GOOD_COLOR,
                         'mid_type': 'percentile',
                         'mid_value': 50,
-                        'mid_color': '#FFFFFF',  # White for middle values
+                        'mid_color': NEUTRAL_COLOR,
                         'max_type': 'percentile',
                         'max_value': 100,
-                        'max_color': '#FF6347'  # Darker red for high values
+                        'max_color': BAD_COLOR
                     })
                 else:
                     worksheet.conditional_format(1, col_index, len(df), col_index, {
                         'type': '3_color_scale',
                         'min_type': 'min',
-                        'min_color': '#FF6347',  # Darker red for minimum values
+                        'min_color': BAD_COLOR,
                         'mid_type': 'num',
                         'mid_value': 0,
-                        'mid_color': '#FFFFFF',  # White for 0
+                        'mid_color': NEUTRAL_COLOR,
                         'max_type': 'max',
-                        'max_color': '#00FF00'  # Green for maximum values
+                        'max_color': GOOD_COLOR
                     })
 
     # Include the VBA macro script in your workbook

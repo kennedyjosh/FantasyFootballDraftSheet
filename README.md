@@ -18,9 +18,12 @@ a custom draft sheet based on those projections.
    The column containing the name of the platform should hold that player's overall
    rank on that platform. **You can skip this step, but** the related column
    will be missing on your draft sheet, so it isn't recommended.
-3. Run `main.py`. Don't forget to install the requirements 
+3. (Optional) Add a file `teams.csv` in the `notes` folder. It should have a sorted
+   list of teams in the first column. This sorting determines what rank you think each team
+   is, and the team will be colored appropriately on the draft sheet to indicate their strength. 
+4. Run `main.py`. Don't forget to install the requirements 
    (`pip install -r requirements.txt`)
-4. Open `DraftSheet.xlsm` (enable macros) and you're ready to draft!
+5. Open `DraftSheet.xlsm` (enable macros) and you're ready to draft!
    It's normal for the spreadsheet to take a long time to load when
    first opening it, but once it's loaded it'll be quick.
 
